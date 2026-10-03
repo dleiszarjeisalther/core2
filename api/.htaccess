@@ -1,0 +1,16 @@
+# HRIS REST API Microservice — Apache Configuration
+# Routes every request for this folder through the index.php front controller.
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^(.*)$ index.php?route=$1 [QSA,L]
+</IfModule>
+
+Options -MultiViews -Indexes
+
+# The microservice only returns JSON.
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>

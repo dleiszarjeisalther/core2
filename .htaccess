@@ -1,0 +1,12 @@
+# HRIS System - Apache Configuration
+
+# Protect config and database folders from direct web access
+<FilesMatch "\.(sql|md)$">
+    Require all denied
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes
+
+# Default document
+DirectoryIndex index.php

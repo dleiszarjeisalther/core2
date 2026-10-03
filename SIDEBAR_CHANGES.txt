@@ -1,0 +1,9 @@
+Sidebar cleanup:
+- Removed Positions menu
+- Removed Reports & Export menu
+- Removed Data Import menu
+- Removed Login Access menu
+- Removed Employee Contracts menu
+- Removed Add New Employee button from Employee Management
+- Sign Out now asks: "Are you sure you want to sign out?"
+- Employee update now asks: "Are you sure you want to update the employee?"

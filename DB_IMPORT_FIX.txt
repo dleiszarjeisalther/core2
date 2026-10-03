@@ -1,0 +1,10 @@
+HRIS DATABASE IMPORT FIX
+
+Fixed issues:
+1. employee_contracts was not included in the DROP list, so an older/incompatible employee_contracts table could remain and cause CREATE TABLE errors.
+2. employee_contracts is now dropped before employees and recreated with employee_id VARCHAR(20), matching employees.employee_id exactly.
+3. Attendance and calendar demo seeds use INSERT IGNORE so re-importing does not fail on duplicate employee/date records.
+
+IMPORTANT:
+Import the complete IMPORT_THIS_SQL.sql file, not only the employee_contracts CREATE TABLE statement.
+The SQL is intended for the hris_db database and recreates the application tables cleanly.

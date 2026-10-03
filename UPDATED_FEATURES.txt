@@ -1,0 +1,31 @@
+HRIS UPDATED FEATURES
+
+1. Employee photo avatars are no longer circular; they use a small rounded rectangle.
+2. Attendance report now shows Work Days, Records, Total Hours, Break Hours, Regular Hours, OT Hours, Late Minutes, and Special Working Days.
+3. Payroll cutoff is enforced as:
+   - 1 to 15
+   - 16 to the last day of the month (30, 31, 28, or 29 as applicable)
+4. Workday & Holiday Calendar added for HR/Admin:
+   - Working Day
+   - Special Working Day (2.00x default rule when actually worked)
+   - Special Non-Working Day
+   - Non-Working Day
+5. Payroll automatically reads the calendar and adds the Special Working Day premium when an employee actually works the marked date.
+6. Payslip now shows the Special Working Day premium separately.
+7. Web payroll and API payroll use the same cutoff and Special Working Day rules.
+8. Password policy for new/changed employee passwords: minimum 10 characters, uppercase, lowercase, number, and special character.
+9. Demo accounts admin, superadmin, and msantos were upgraded from password123 only when that weak password is still in use.
+
+DEMO PASSWORDS FOR THIS CAPSTONE BUILD
+- admin: Admin@HRIS2026!
+- superadmin: Super@HRIS2026!
+- msantos: Msantos@HRIS2026!
+
+For production deployment, change all demo passwords and do not reuse them across accounts.
+2026-09-28 attendance UI/data update:
+- Employee profile photos use a square/non-circular presentation (no rounded photo frame).
+- Admin Attendance Daily Report now has a visible date picker plus Previous, Today, and Next controls.
+- Admin daily attendance table now shows break time, total worked hours, regular hours, overtime, late minutes, and Special Working Day 2x indicator.
+- September 2026 demo attendance data added for 10 employees with varied time-in/out, breaks, late, and overtime records for report/payroll testing.
+- September demo calendar data added for Special Working Day, Special Non-Working Day, and Non-Working Day testing.
+- Attendance seed uses an upsert so imported demo data includes break/hour details even if earlier demo rows exist for the same dates.
