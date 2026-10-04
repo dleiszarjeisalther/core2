@@ -7,21 +7,24 @@
 require_once __DIR__ . '/env.php';
 
 // HostForge Resilience Pattern 1: Support DATABASE_URL and individual DB_* variables
+$rawEnvUser = getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: '');
+$rawEnvPass = getenv('DB_PASS') !== false ? getenv('DB_PASS') : (getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : null);
+
 $dbUrl = getenv('DATABASE_URL') ?: (getenv('CLEARDB_DATABASE_URL') ?: (getenv('JAWSDB_URL') ?: ''));
 
 if (!empty($dbUrl)) {
     $parsed = parse_url($dbUrl);
-    $host = $parsed['host'] ?? 'localhost';
-    $port = (string)($parsed['port'] ?? '3306');
-    $user = $parsed['user'] ?? 'root';
-    $pass = $parsed['pass'] ?? '';
-    $name = ltrim($parsed['path'] ?? '', '/');
+    $host = $parsed['host'] ?? (getenv('DB_HOST') ?: 'localhost');
+    $port = (string)($parsed['port'] ?? (getenv('DB_PORT') ?: '3306'));
+    $user = isset($parsed['user']) ? urldecode($parsed['user']) : ($rawEnvUser ?: 'root');
+    $pass = isset($parsed['pass']) ? urldecode($parsed['pass']) : ($rawEnvPass ?? '');
+    $name = !empty($parsed['path']) ? ltrim($parsed['path'], '/') : (getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: 'hris_db'));
 } else {
     $host = getenv('DB_HOST') ?: 'localhost';
     $port = getenv('DB_PORT') ?: '3306';
     $name = getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: 'hris_db');
-    $user = getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: 'root');
-    $pass = getenv('DB_PASS') !== false ? getenv('DB_PASS') : (getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : '');
+    $user = $rawEnvUser ?: 'root';
+    $pass = $rawEnvPass !== null ? $rawEnvPass : '';
 }
 
 $rawUser = $user;
@@ -39,6 +42,24 @@ if (strpos($user, '@') !== false) {
 if ((str_starts_with($pass, '"') && str_ends_with($pass, '"')) ||
     (str_starts_with($pass, "'") && str_ends_with($pass, "'"))) {
     $pass = substr($pass, 1, -1);
+}
+
+// Build list of candidate credentials to try if initial connection fails with 1045
+$authCandidates = [];
+$authCandidates[] = [$user, $pass];
+if ($rawUser !== $user) {
+    $authCandidates[] = [$rawUser, $pass];
+}
+if (!empty($parsed['pass'])) {
+    $authCandidates[] = [$user, $parsed['pass']];
+    $authCandidates[] = [$user, urldecode($parsed['pass'])];
+}
+if ($rawEnvUser !== '' && $rawEnvPass !== null) {
+    $cleanRawUser = explode('@', $rawEnvUser)[0];
+    $cleanRawPass = trim($rawEnvPass, "\"'");
+    $authCandidates[] = [$cleanRawUser, $cleanRawPass];
+    $authCandidates[] = [$cleanRawUser, $rawEnvPass];
+    $authCandidates[] = [$rawEnvUser, $rawEnvPass];
 }
 
 define('DB_HOST', $host);
@@ -93,18 +114,25 @@ try {
                 }
             }
 
-            // Error 1045: Access denied (fallback between raw and sanitized credentials)
-            if ($e->getCode() == 1045 && ($rawUser !== DB_USER || $rawPass !== DB_PASS)) {
-                try {
-                    $pdo = new PDO(
-                        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-                        $rawUser,
-                        $rawPass,
-                        $driverOptions
-                    );
+            // Error 1045: Access denied (test all candidate combinations)
+            if ($e->getCode() == 1045 && !empty($authCandidates)) {
+                $connected = false;
+                foreach ($authCandidates as [$candUser, $candPass]) {
+                    try {
+                        $pdo = new PDO(
+                            "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+                            $candUser,
+                            $candPass,
+                            $driverOptions
+                        );
+                        $connected = true;
+                        break;
+                    } catch (PDOException $eFallback) {
+                        continue;
+                    }
+                }
+                if ($connected) {
                     break;
-                } catch (PDOException $e2) {
-                    throw $e;
                 }
             }
 
