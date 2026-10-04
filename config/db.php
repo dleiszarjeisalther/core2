@@ -4,33 +4,117 @@
  * HRIS Capstone System
  */
 
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_PORT', getenv('DB_PORT') ?: '3306');
-define('DB_NAME', getenv('DB_NAME') ?: 'hris_db');
-define('DB_USER', getenv('DB_USER') ?: 'root');
-define('DB_PASS', getenv('DB_PASS') ?: '');
+require_once __DIR__ . '/env.php';
+
+// HostForge Resilience Pattern 1: Support DATABASE_URL and individual DB_* variables
+$dbUrl = getenv('DATABASE_URL') ?: (getenv('CLEARDB_DATABASE_URL') ?: (getenv('JAWSDB_URL') ?: ''));
+
+if (!empty($dbUrl)) {
+    $parsed = parse_url($dbUrl);
+    $host = $parsed['host'] ?? 'localhost';
+    $port = (string)($parsed['port'] ?? '3306');
+    $user = $parsed['user'] ?? 'root';
+    $pass = $parsed['pass'] ?? '';
+    $name = ltrim($parsed['path'] ?? '', '/');
+} else {
+    $host = getenv('DB_HOST') ?: 'localhost';
+    $port = getenv('DB_PORT') ?: '3306';
+    $name = getenv('DB_NAME') ?: (getenv('DB_DATABASE') ?: 'hris_db');
+    $user = getenv('DB_USER') ?: (getenv('DB_USERNAME') ?: 'root');
+    $pass = getenv('DB_PASS') !== false ? getenv('DB_PASS') : (getenv('DB_PASSWORD') !== false ? getenv('DB_PASSWORD') : '');
+}
+
+$rawUser = $user;
+$rawPass = $pass;
+
+// Sanitize username: strip '@%' or '@host' if copied from MySQL/MariaDB User@Host
+if (strpos($user, '@') !== false) {
+    $parts = explode('@', $user, 2);
+    if ($parts[1] === '%' || $parts[1] === 'localhost' || filter_var($parts[1], FILTER_VALIDATE_IP) || strpos($parts[1], '.') !== false) {
+        $user = $parts[0];
+    }
+}
+
+// Strip accidental wrapping quotes from password
+if ((str_starts_with($pass, '"') && str_ends_with($pass, '"')) ||
+    (str_starts_with($pass, "'") && str_ends_with($pass, "'"))) {
+    $pass = substr($pass, 1, -1);
+}
+
+define('DB_HOST', $host);
+define('DB_PORT', $port);
+define('DB_NAME', $name);
+define('DB_USER', $user);
+define('DB_PASS', $pass);
 
 $driverOptions = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
     PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
     PDO::ATTR_EMULATE_PREPARES   => false,
+    PDO::ATTR_TIMEOUT            => 5,
 ];
 
 try {
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        $driverOptions
-    );
+    $maxAttempts = 5;
+    $retryDelaySec = 2;
+    $pdo = null;
+    $lastException = null;
 
- 
-$pdo = new PDO(
-    "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-    DB_USER,
-    DB_PASS,
-    $driverOptions
-);
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        try {
+            // First ensure database exists if on localhost or root permissions
+            try {
+                $rootPdo = new PDO(
+                    "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";charset=utf8mb4",
+                    DB_USER,
+                    DB_PASS,
+                    $driverOptions
+                );
+                $rootPdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
+            } catch (Throwable $eDbInit) {
+                // Cloud databases may lack global CREATE DATABASE privileges
+            }
+
+            $pdo = new PDO(
+                "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+                DB_USER,
+                DB_PASS,
+                $driverOptions
+            );
+            break;
+        } catch (PDOException $e) {
+            $lastException = $e;
+
+            // Error 2002: Connection refused / Server starting up in container
+            if ($e->getCode() == 2002 || strpos($e->getMessage(), 'Connection refused') !== false) {
+                if ($attempt < $maxAttempts) {
+                    sleep($retryDelaySec);
+                    continue;
+                }
+            }
+
+            // Error 1045: Access denied (fallback between raw and sanitized credentials)
+            if ($e->getCode() == 1045 && ($rawUser !== DB_USER || $rawPass !== DB_PASS)) {
+                try {
+                    $pdo = new PDO(
+                        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+                        $rawUser,
+                        $rawPass,
+                        $driverOptions
+                    );
+                    break;
+                } catch (PDOException $e2) {
+                    throw $e;
+                }
+            }
+
+            throw $e;
+        }
+    }
+
+    if (!$pdo && $lastException) {
+        throw $lastException;
+    }
 
     $tableCheck = $pdo->query("SHOW TABLES LIKE 'employees'");
     if (!$tableCheck->fetch()) {
@@ -50,7 +134,15 @@ $pdo = new PDO(
             if ($statement === '') {
                 continue;
             }
-            $pdo->exec($statement);
+            // Skip CREATE DATABASE or USE statements for managed cloud databases
+            if (preg_match('/^\s*(CREATE\s+DATABASE|USE\s+)/i', $statement)) {
+                continue;
+            }
+            try {
+                $pdo->exec($statement);
+            } catch (Throwable $stmtEx) {
+                // Ignore non-fatal statement warnings
+            }
         }
     }
 

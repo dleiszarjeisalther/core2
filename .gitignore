@@ -1,0 +1,7 @@
+# Environment files
+.env
+
+# Temporary / Log files
+*.log
+scratch/
+.system_generated/
