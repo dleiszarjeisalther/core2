@@ -4,10 +4,11 @@
  * HRIS Capstone System
  */
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'hris_db');
-define('DB_USER', 'root');
-define('DB_PASS', '');
+define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
+define('DB_PORT', getenv('DB_PORT') ?: '3306');
+define('DB_NAME', getenv('DB_NAME') ?: 'hris_db');
+define('DB_USER', getenv('DB_USER') ?: 'root');
+define('DB_PASS', getenv('DB_PASS') ?: '');
 
 $driverOptions = [
     PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
@@ -17,20 +18,19 @@ $driverOptions = [
 
 try {
     $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";charset=utf8mb4",
+        "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";charset=utf8mb4",
         DB_USER,
         DB_PASS,
         $driverOptions
     );
 
-    $pdo->exec("CREATE DATABASE IF NOT EXISTS `" . DB_NAME . "`");
-
-    $pdo = new PDO(
-        "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=utf8mb4",
-        DB_USER,
-        DB_PASS,
-        $driverOptions
-    );
+ 
+$pdo = new PDO(
+    "mysql:host=" . DB_HOST . ";port=" . DB_PORT . ";dbname=" . DB_NAME . ";charset=utf8mb4",
+    DB_USER,
+    DB_PASS,
+    $driverOptions
+);
 
     $tableCheck = $pdo->query("SHOW TABLES LIKE 'employees'");
     if (!$tableCheck->fetch()) {
@@ -228,7 +228,7 @@ try {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, read_at DATETIME NULL,
       INDEX idx_notifications_recipient (recipient_user_id, is_read, created_at)
     ) ENGINE=InnoDB");
-    $pdo->exec("CREATE TABLE IF NOT EXISTS data_submissions (
+    $pdo->exec("CREATE TABLE IF NOT EXISTS data_submissions (    
       submission_id BIGINT AUTO_INCREMENT PRIMARY KEY, sender_user_id INT NOT NULL,
       source_branch VARCHAR(120) NOT NULL, destination_branch VARCHAR(120) NULL,
       title VARCHAR(180) NOT NULL, message TEXT NULL, file_path VARCHAR(255) NULL,
